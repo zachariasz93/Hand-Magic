@@ -9,6 +9,12 @@ export enum GestureType {
   DOUBLE_PALM = 'DOUBLE_PALM' // For fullscreen toggle
 }
 
+export enum Theme {
+  NEBULA = 'NEBULA',
+  FIRE = 'FIRE',
+  ICE = 'ICE'
+}
+
 export interface ParticleSystemConfig {
   count: number;
   colorBase: number;

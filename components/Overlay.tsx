@@ -1,15 +1,19 @@
 import React from 'react';
-import { GestureType, CameraDevice } from '../types';
+import { GestureType, CameraDevice, Theme } from '../types';
 
 interface Props {
   gesture: GestureType;
   fps: number;
   cameras: CameraDevice[];
   selectedCameraId: string | null;
+  showPreview: boolean;
+  currentTheme: Theme;
   onSelectCamera: (deviceId: string) => void;
+  onTogglePreview: (show: boolean) => void;
+  onThemeChange: (theme: Theme) => void;
 }
 
-const Overlay: React.FC<Props> = ({ gesture, fps, cameras, selectedCameraId, onSelectCamera }) => {
+const Overlay: React.FC<Props> = ({ gesture, fps, cameras, selectedCameraId, showPreview, currentTheme, onSelectCamera, onTogglePreview, onThemeChange }) => {
   const getGestureIcon = (g: GestureType) => {
     switch (g) {
       case GestureType.OPEN_HAND: return "🖐️ Swirl";
@@ -61,6 +65,30 @@ const Overlay: React.FC<Props> = ({ gesture, fps, cameras, selectedCameraId, onS
               ))}
             </select>
           )}
+
+          <div className="flex items-center gap-2 pointer-events-auto">
+            <label className="text-xs text-cyan-400 font-mono flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showPreview}
+                onChange={(e) => onTogglePreview(e.target.checked)}
+                className="accent-cyan-500"
+              />
+              Preview
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2 pointer-events-auto">
+             <select
+                className="pointer-events-auto bg-black/50 border border-purple-500/30 rounded px-2 py-1 text-xs text-purple-400 font-mono focus:outline-none focus:border-purple-500 backdrop-blur-sm hover:bg-black/70 transition-all"
+                value={currentTheme}
+                onChange={(e) => onThemeChange(e.target.value as Theme)}
+             >
+                <option value={Theme.NEBULA}>Nebula</option>
+                <option value={Theme.FIRE}>Fire</option>
+                <option value={Theme.ICE}>Ice</option>
+             </select>
+          </div>
         </div>
       </div>
 

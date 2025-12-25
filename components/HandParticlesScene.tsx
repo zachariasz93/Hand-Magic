@@ -4,7 +4,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass';
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
-import { GestureType, CameraDevice } from '../types';
+import { GestureType, CameraDevice, Theme } from '../types';
 import { detectGesture } from '../utils/gestureLogic';
 
 // Configuration
@@ -17,13 +17,17 @@ interface Props {
   onFpsUpdate: (fps: number) => void;
   onCamerasFound: (devices: CameraDevice[]) => void;
   selectedCameraId: string | null;
+  showPreview: boolean;
+  currentTheme: Theme;
 }
 
 const HandParticlesScene: React.FC<Props> = ({ 
   onGestureChange, 
   onFpsUpdate, 
   onCamerasFound, 
-  selectedCameraId 
+  selectedCameraId,
+  showPreview,
+  currentTheme
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -66,8 +70,14 @@ const HandParticlesScene: React.FC<Props> = ({
     gestureStrength: 0,
     time: 0,
     doublePalmTimer: 0,
-    isStreamReady: false
+    isStreamReady: false,
+    theme: Theme.NEBULA
   });
+
+  // Sync theme to ref
+  useEffect(() => {
+    sceneState.current.theme = currentTheme;
+  }, [currentTheme]);
 
   const animate = useCallback(() => {
       const { renderer, composer, camera } = threeRef.current;
@@ -94,6 +104,19 @@ const HandParticlesScene: React.FC<Props> = ({
       } = sceneState.current;
 
       if (!particles || !positions || !velocities || !homePositions || !colors) return;
+
+      // Theme-based physics parameters
+      let returnForce = 1.5;
+      let friction = 0.92;
+      const theme = sceneState.current.theme;
+
+      if (theme === Theme.FIRE) {
+         returnForce = 1.0;
+         friction = 0.90; // Slower decay, more floaty
+      } else if (theme === Theme.ICE) {
+         returnForce = 2.0; // Snaps back harder
+         friction = 0.85; // Stops faster
+      }
 
       const positionAttr = particles.geometry.attributes.position;
       const colorAttr = particles.geometry.attributes.color;
@@ -122,9 +145,16 @@ const HandParticlesScene: React.FC<Props> = ({
         const distHomeZ = hz - pz;
 
         // Base attraction to home
-        vx += distHomeX * 1.5 * dt;
-        vy += distHomeY * 1.5 * dt;
-        vz += distHomeZ * 1.5 * dt;
+        vx += distHomeX * returnForce * dt;
+        vy += distHomeY * returnForce * dt;
+        vz += distHomeZ * returnForce * dt;
+
+        if (theme === Theme.FIRE) {
+             // Upward drift
+             vy += 5.0 * dt;
+             // Random flicker
+             vx += (Math.random() - 0.5) * 5 * dt;
+        }
 
         // Hand Interaction
         if (isHandPresent) {
@@ -132,11 +162,18 @@ const HandParticlesScene: React.FC<Props> = ({
           const dy = py - mouse.y;
           const dz = pz - mouse.z;
           const distSq = dx * dx + dy * dy + dz * dz;
-          const dist = Math.sqrt(distSq);
+
+          // Optimization: Avoid Sqrt when simple range check is enough
+          // Thresholds squared:
+          // 15 -> 225
+          // 40 -> 1600
+          // 50 -> 2500
+          // 60 -> 3600
 
           // 1. OPEN HAND: Swirl
           if (gesture === GestureType.OPEN_HAND) {
-            if (dist < 40) {
+            if (distSq < 1600) {
+              const dist = Math.sqrt(distSq); // Only calc if inside range
               const force = (40 - dist) * 1.5;
               vx += -dy * force * 0.5 * dt;
               vy += dx * force * 0.5 * dt;
@@ -150,7 +187,8 @@ const HandParticlesScene: React.FC<Props> = ({
           } 
           // 2. FIST: Repel (Explosion)
           else if (gesture === GestureType.CLOSED_FIST) {
-            if (dist < 50) {
+            if (distSq < 2500) {
+              const dist = Math.sqrt(distSq);
               const force = (50 - dist) * 20.0; // Strong Repel
               const dirX = dx / dist;
               const dirY = dy / dist;
@@ -164,7 +202,7 @@ const HandParticlesScene: React.FC<Props> = ({
           // 3. PINCH: Suction
           else if (gesture === GestureType.PINCH) {
              // Strong attraction to center
-             if (dist < 60) {
+             if (distSq < 3600) {
                 const strength = 150 * gestureStrength;
                 vx -= dx * strength * dt;
                 vy -= dy * strength * dt;
@@ -173,14 +211,14 @@ const HandParticlesScene: React.FC<Props> = ({
           }
           // 4. VICTORY: Wave + Rainbow
           else if (gesture === GestureType.VICTORY) {
-            if (dist < 40) {
+            if (distSq < 1600) {
                // Sine wave lift
                vy += Math.sin(px * 0.2 + time * 10) * 20 * dt;
             }
           }
           // 5. THUMBS UP: Heart/Orbit Shape
           else if (gesture === GestureType.THUMBS_UP) {
-             if (dist < 40) {
+             if (distSq < 1600) {
                // Lissajous orbit
                const tx = Math.sin(time * 3 + i * 0.1) * 20;
                const ty = Math.cos(time * 3 + i * 0.1) * 20;
@@ -190,7 +228,7 @@ const HandParticlesScene: React.FC<Props> = ({
           }
           // 6. ROCK ON: Chaos
           else if (gesture === GestureType.ROCK_ON) {
-             if (dist < 60) {
+             if (distSq < 3600) {
                vx += (Math.random() - 0.5) * 200 * dt;
                vy += (Math.random() - 0.5) * 200 * dt;
                vz += (Math.random() - 0.5) * 200 * dt;
@@ -198,7 +236,8 @@ const HandParticlesScene: React.FC<Props> = ({
           }
           else {
             // Passive repulse just a bit to not clip through hand
-            if (dist < 15) {
+            if (distSq < 225) {
+               const dist = Math.sqrt(distSq);
                const force = (15 - dist) * 10;
                vx += (dx / dist) * force * dt;
                vy += (dy / dist) * force * dt;
@@ -206,7 +245,7 @@ const HandParticlesScene: React.FC<Props> = ({
             }
           }
 
-          // Color Updates
+          // Color Updates (Simplified checks)
           if (gesture === GestureType.VICTORY) {
              // Rainbow wave
              const hue = (time * 0.2 + px * 0.01) % 1;
@@ -215,25 +254,41 @@ const HandParticlesScene: React.FC<Props> = ({
              colors[i3+1] = c.g;
              colors[i3+2] = c.b;
           } else if (gesture === GestureType.PINCH) {
-             // Red/Orange heat
-             const intensity = Math.min(1, 40 / (dist + 1));
-             colors[i3] = 1.0;
-             colors[i3+1] = 1.0 - intensity;
-             colors[i3+2] = 1.0 - intensity;
+             if (distSq < 1600) { // Optimization
+                const dist = Math.sqrt(distSq);
+                // Red/Orange heat
+                const intensity = Math.min(1, 40 / (dist + 1));
+                colors[i3] = 1.0;
+                colors[i3+1] = 1.0 - intensity;
+                colors[i3+2] = 1.0 - intensity;
+             }
           } else {
-             // Reset slowly to gradient
+             // Reset slowly to theme
              if (Math.random() < 0.05) {
-                 colors[i3] = homePositions[i3] > 0 ? 0 : 1; 
-                 colors[i3+1] = 0.8;
-                 colors[i3+2] = 1;
+                 if (theme === Theme.FIRE) {
+                    // Red/Orange/Yellow
+                    colors[i3] = 1.0;
+                    colors[i3+1] = Math.random() * 0.6; // Orange/Yellow
+                    colors[i3+2] = 0.0;
+                 } else if (theme === Theme.ICE) {
+                    // Cyan/White/Blue
+                    colors[i3] = Math.random() * 0.5;
+                    colors[i3+1] = 0.8 + Math.random() * 0.2;
+                    colors[i3+2] = 1.0;
+                 } else {
+                    // Nebula (Default)
+                    colors[i3] = homePositions[i3] > 0 ? 0 : 1;
+                    colors[i3+1] = 0.8;
+                    colors[i3+2] = 1;
+                 }
              }
           }
         }
 
         // Apply friction
-        vx *= 0.92;
-        vy *= 0.92;
-        vz *= 0.92;
+        vx *= friction;
+        vy *= friction;
+        vz *= friction;
 
         positions[i3] += vx * dt;
         positions[i3 + 1] += vy * dt;
@@ -546,7 +601,18 @@ const HandParticlesScene: React.FC<Props> = ({
     <div ref={containerRef} className="absolute inset-0 z-0 bg-black">
       <video
         ref={videoRef}
-        style={{ position: 'absolute', opacity: 0, top: 0, left: 0, zIndex: -1 }}
+        style={{
+          position: 'absolute',
+          opacity: showPreview ? 1 : 0,
+          bottom: showPreview ? '20px' : 'auto',
+          right: showPreview ? '20px' : 'auto',
+          top: showPreview ? 'auto' : 0,
+          left: showPreview ? 'auto' : 0,
+          zIndex: showPreview ? 20 : -1,
+          width: showPreview ? '200px' : 'auto',
+          borderRadius: '10px',
+          border: showPreview ? '2px solid #00FFFF' : 'none'
+        }}
         playsInline
         muted
         autoPlay
