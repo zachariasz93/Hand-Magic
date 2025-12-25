@@ -1,13 +1,15 @@
 import React, { useState, useCallback } from 'react';
 import HandParticlesScene from './components/HandParticlesScene';
 import Overlay from './components/Overlay';
-import { GestureType, CameraDevice } from './types';
+import { GestureType, CameraDevice, Theme } from './types';
 
 function App() {
   const [currentGesture, setCurrentGesture] = useState<GestureType>(GestureType.NONE);
   const [fps, setFps] = useState(0);
   const [cameras, setCameras] = useState<CameraDevice[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [currentTheme, setCurrentTheme] = useState<Theme>(Theme.NEBULA);
 
   const handleGestureChange = useCallback((gesture: GestureType) => {
     setCurrentGesture(gesture);
@@ -38,13 +40,19 @@ function App() {
         onFpsUpdate={handleFpsUpdate}
         onCamerasFound={handleCamerasFound}
         selectedCameraId={selectedCameraId}
+        showPreview={showPreview}
+        currentTheme={currentTheme}
       />
       <Overlay 
         gesture={currentGesture} 
         fps={fps}
         cameras={cameras}
         selectedCameraId={selectedCameraId}
+        showPreview={showPreview}
+        currentTheme={currentTheme}
         onSelectCamera={handleCameraSelect}
+        onTogglePreview={setShowPreview}
+        onThemeChange={setCurrentTheme}
       />
     </div>
   );
