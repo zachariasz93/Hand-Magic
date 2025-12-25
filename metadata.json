@@ -1,0 +1,7 @@
+{
+  "name": "Hand Magic Particles",
+  "description": "Interactive 3D particle simulation controlled by hand gestures using MediaPipe and Three.js.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
